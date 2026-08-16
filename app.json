@@ -1,46 +1,25 @@
 {
-  "expo": {
-    "name": "Agon Preview",
-    "slug": "zihad-khan-audio-recorder-pro-k-jtaxagq8smtmzeqt04c",
-    "owner": "zihad-khan-001s-team",
-    "version": "1.0.0",
-    "orientation": "portrait",
-    "icon": "./assets/icon.png",
-    "userInterfaceStyle": "dark",
-    "ios": {
-      "supportsTablet": true
-    },
-    "android": {
-      "package": "com.zihadkhan.audiorecorderpro",
-      "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
-      },
-      "predictiveBackGestureEnabled": false
-    },
-    "web": {
-      "favicon": "./assets/favicon.png"
-    },
-    "extra": {
-      "eas": {
-        "projectId": "28d42fcd-445c-42bd-ad90-70de71ec47c4"
-      }
-    },
-    "updates": {
-      "url": "https://u.expo.dev/28d42fcd-445c-42bd-ad90-70de71ec47c4"
-    },
-    "runtimeVersion": {
-      "policy": "appVersion"
-    },
-    "platforms": [
-      "ios",
-      "android",
-      "web"
-    ],
-    "plugins": [
-      "expo-font"
-    ]
-  }
+  "name": "agon-preview",
+  "version": "1.0.0",
+  "main": "expo/AppEntry.js",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web"
+  },
+  "dependencies": {
+    "expo": "~51.0.0",
+    "expo-av": "~14.0.5",
+    "expo-file-system": "~17.0.1",
+    "expo-font": "~12.0.4",
+    "expo-sharing": "~12.0.1",
+    "expo-status-bar": "~1.12.1",
+    "react": "18.2.0",
+    "react-native": "0.74.5"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.20.0"
+  },
+  "private": true
 }
