@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Agon Preview",
-    "slug": "agon-preview",
+    "slug": "zihad-khan-special-audiorecorder-pro",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -10,6 +10,7 @@
       "supportsTablet": true
     },
     "android": {
+      "package": "com.zihadkhan.audiorecorderpro",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -27,12 +28,11 @@
       }
     },
     "updates": {
-      "url": "https://u.expo.dev/552f0665-e30d-4f11-9ea9-97bc22a22809"
+      "url": "https://u.expo.dev/28d42fcd-445c-42bd-ad90-70de71ec47c4"
     },
     "runtimeVersion": {
       "policy": "appVersion"
     },
-    "owner": "arcadalabs",
     "platforms": [
       "ios",
       "android",
