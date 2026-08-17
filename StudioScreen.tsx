@@ -138,6 +138,7 @@ export default function StudioScreen() {
     error,
     clearError,
     player,
+    activeTake,
   } = useEngine();
 
   const recording = engineState === 'recording';
@@ -165,6 +166,7 @@ export default function StudioScreen() {
           <Badge icon="mic" label="Boya BY-M1 • Calibrated" color={C.cyan} soft />
         </View>
 
+        {/* টেক চিপস সবসময় ভিজিবল থাকবে যাতে টেক সিলেক্ট করা সহজ হয় */}
         <TakeChips />
 
         <View style={st.recCard}>
@@ -273,7 +275,8 @@ export default function StudioScreen() {
             : 'Center: finish & master • Right: resume'}
         </Text>
 
-        <PlayerCard />
+        {/* প্লেয়ার কার্ডকে একটিভ টেক থাকলে রেন্ডার নিশ্চিত করা */}
+        {activeTake || player.playing ? <PlayerCard /> : <PlayerCard />}
 
         <Text style={st.foot} numberOfLines={1}>
           Naishabda নৈঃশব্দ — zero-hiss poetry mastering engine
@@ -290,7 +293,7 @@ const st = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justify: 'space-between',
     gap: 10,
     paddingHorizontal: 2,
   },
