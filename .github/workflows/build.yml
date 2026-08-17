@@ -1,0 +1,41 @@
+name: Build Android APK
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch: # এটি দিলে Actions ট্যাব থেকে ম্যানুয়ালি বাটন চেপেও বিল্ড শুরু করা যাবে
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 🏗 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 🟢 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: ☕ Setup Java (JDK 17)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: 🛠 Install EAS CLI globally
+        run: npm install -g eas-cli
+
+      - name: 📦 Install Dependencies
+        run: npm install
+
+      - name: 🚀 Build Local APK
+        run: npx eas-cli build --platform android --profile preview --local --output=app-release.apk
+
+      - name: 📥 Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release
+          path: app-release.apk
