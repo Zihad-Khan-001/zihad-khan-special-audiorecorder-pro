@@ -197,7 +197,6 @@ class Engine {
   private bars = new Float32Array(64);
   private startT = 0;
   private accumMs = 0;
-  private pauseT = 0;
 
   // --- playback ---
   private elA: HTMLAudioElement | null = null;
@@ -218,6 +217,7 @@ class Engine {
     this.hs.add(h);
     return () => this.hs.delete(h);
   }
+
   private emit<K extends keyof Handler>(k: K, ...args: any[]) {
     this.hs.forEach((h) => {
       const fn = h[k] as any;
@@ -229,7 +229,9 @@ class Engine {
 
   setInputGain(g: number) {
     this.inputGain = g;
-    if (this.gainNode) this.gainNode.gain.setTargetAtTime(g, this.ctx!.currentTime, 0.015);
+    if (this.gainNode && this.ctx) {
+      this.gainNode.gain.setTargetAtTime(g, this.ctx.currentTime, 0.015);
+    }
   }
 
   private ensureCtx(): AudioContext {
@@ -237,7 +239,9 @@ class Engine {
       const AC: any = (globalThis as any).AudioContext || (globalThis as any).webkitAudioContext;
       this.ctx = new AC({ latencyHint: 'interactive' });
     }
-    if (this.ctx!.state === 'suspended') this.ctx!.resume();
+    if (this.ctx!.state === 'suspended') {
+      this.ctx!.resume().catch(() => {});
+    }
     return this.ctx!;
   }
 
@@ -303,8 +307,8 @@ class Engine {
   }
 
   private finalizeElapsed() {
-    if (this.state === 'recording') {
-      this.accumMs += (this.ctx!.currentTime - this.startT) * 1000;
+    if (this.state === 'recording' && this.ctx) {
+      this.accumMs += (this.ctx.currentTime - this.startT) * 1000;
     }
     return this.accumMs;
   }
@@ -457,7 +461,6 @@ class Engine {
     };
 
     if (s.hp.on) {
-      // 4th-order Butterworth @ 80 Hz (Q pair 0.5412 / 1.3066)
       chain(biq('highpass', s.hp.freq, 0.541196));
       chain(biq('highpass', s.hp.freq, 1.306563));
     }
@@ -510,7 +513,11 @@ class Engine {
     tail.connect(lim);
     lim.connect(off.destination);
     src.start(0);
-    const rendered = await off.startRendering();
+
+    const rendered = await (off.startRendering ? off.startRendering() : new Promise<AudioBuffer>((resolve, reject) => {
+      off.oncomplete = (e) => resolve(e.renderedBuffer);
+      (off as any).startRendering?.().catch(reject);
+    }));
 
     onStage?.('loudness-tp');
     const L = Float32Array.from(rendered.getChannelData(0));
@@ -573,7 +580,6 @@ class Engine {
     this.pUrlA = rawUrl;
     this.pUrlB = masteredUrl || '';
     if (!this.isWeb) {
-      // native: reset expo-av sound so next play loads the new take
       if (this.nSound) {
         this.nSound.unloadAsync().catch(() => {});
         this.nSound = null;
@@ -716,12 +722,18 @@ class Engine {
     };
     this.playbackRaf = requestAnimationFrame(loop);
   }
+
   private stopPlaybackMeter() {
     cancelAnimationFrame(this.playbackRaf);
   }
 
   stopPlayer() {
-    if (!this.isWeb) return;
+    if (!this.isWeb) {
+      if (this.nSound) {
+        this.nSound.pauseAsync().catch(() => {});
+      }
+      return;
+    }
     this.stopPlaybackMeter();
     [this.elA, this.elB].forEach((el) => {
       if (el && !el.paused) el.pause();
