@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { StyleSheet, View } from 'react-native';
 import { useFonts } from 'expo-font';
@@ -6,6 +6,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { NavigationContainer, DefaultTheme, Theme } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { Audio } from 'expo-av';
 import { EngineProvider, MeterProvider } from './state/EngineContext';
 import StudioScreen from './screens/StudioScreen';
 import DSPLabScreen from './screens/DSPLabScreen';
@@ -32,6 +33,24 @@ export default function App() {
   const [fontsLoaded] = useFonts({
     ...Ionicons.font,
   });
+
+  // অ্যান্ড্রয়েডে রেকর্ডিং এবং প্লেব্যাক সেশন অ্যাক্টিভ করার অটো-সেটআপ
+  useEffect(() => {
+    async function initAudio() {
+      try {
+        await Audio.requestPermissionsAsync();
+        await Audio.setAudioModeAsync({
+          allowsRecordingIOS: true,
+          playsInSilentModeIOS: true,
+          shouldDuckAndroid: true,
+          playThroughEarpieceAndroid: false,
+        });
+      } catch (e) {
+        console.log('Audio init status:', e);
+      }
+    }
+    initAudio();
+  }, []);
 
   if (!fontsLoaded) return null;
 
