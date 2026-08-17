@@ -44,6 +44,7 @@ interface StoredTake {
 const SETTINGS_KEY = 'naishabda.settings.v1';
 const TAKES_KEY = 'naishabda.takes.v1';
 
+// Session caches (PCM is re-rendered from stored raw audio on demand).
 const pcmCache = new Map<string, { L: Float32Array; R: Float32Array; sr: number }>();
 const rawPcmCache = new Map<string, { pcm: Float32Array; sr: number }>();
 
@@ -146,7 +147,6 @@ export function EngineProvider({ children }: { children: React.ReactNode }) {
         if (tRaw) {
           const stored: StoredTake[] = JSON.parse(tRaw);
           const hydrated: Take[] = stored
-            .filter((t) => t.rawDataUri || true)
             .map((t) => ({
               ...t,
               rawUrl: t.rawDataUri || '',
@@ -176,6 +176,7 @@ export function EngineProvider({ children }: { children: React.ReactNode }) {
     return off;
   }, []);
 
+  // smooth-ish position polling while playing
   useEffect(() => {
     const sameish = (a: PlayerSnapshot, b: PlayerSnapshot) =>
       a.playing === b.playing &&
@@ -183,8 +184,10 @@ export function EngineProvider({ children }: { children: React.ReactNode }) {
       a.durationMs === b.durationMs &&
       Math.abs(a.positionMs - b.positionMs) < 150;
     const iv = setInterval(() => {
-      const snap = engine.playerSnapshot();
-      setPlayer((prev) => (sameish(prev, snap) ? prev : { ...snap }));
+      try {
+        const snap = engine.playerSnapshot();
+        setPlayer((prev) => (sameish(prev, snap) ? prev : { ...snap }));
+      } catch {}
     }, 250);
     return () => clearInterval(iv);
   }, []);
@@ -223,7 +226,8 @@ export function EngineProvider({ children }: { children: React.ReactNode }) {
     if (t.rawUrl && !t.rawUrl.startsWith('data:')) return t.rawUrl;
     if (t.rawDataUri) {
       try {
-        const blob = await (await fetch(t.rawDataUri)).blob();
+        const response = await fetch(t.rawDataUri);
+        const blob = await response.blob();
         const url = URL.createObjectURL(blob);
         setTakes((prev) => prev.map((x) => (x.id === t.id ? { ...x, rawUrl: url } : x)));
         return url;
@@ -234,8 +238,14 @@ export function EngineProvider({ children }: { children: React.ReactNode }) {
 
   const loadIntoPlayer = useCallback(
     async (t: Take) => {
-      const raw = await ensureRawUrl(t);
-      engine.playerLoad(raw, t.masteredUrl);
+      try {
+        const raw = await ensureRawUrl(t);
+        if (engine && typeof engine.playerLoad === 'function') {
+          engine.playerLoad(raw, t.masteredUrl);
+        }
+      } catch (e: any) {
+        setError('Player loading failed: ' + e?.message);
+      }
     },
     [ensureRawUrl]
   );
@@ -274,7 +284,7 @@ export function EngineProvider({ children }: { children: React.ReactNode }) {
         pcmCache.set(t.id, { L: res.L, R: res.R, sr: res.sr });
         const bytes = encodeWavBytes([res.L, res.R], res.sr, settingsRef.current.bitDepth);
         const blob = new Blob([bytes], { type: 'audio/wav' });
-        const url = (URL as any).createObjectURL(blob);
+        const url = URL.createObjectURL(blob);
         setTakes((prev) => {
           const next = prev.map((x) =>
             x.id === t.id
@@ -343,7 +353,7 @@ export function EngineProvider({ children }: { children: React.ReactNode }) {
       });
       setCurrentTakeId(id);
       await loadIntoPlayer(t);
-
+      
       if (!partial.pcm) {
         try {
           const d = await decodeTakePcm(t);
@@ -355,6 +365,7 @@ export function EngineProvider({ children }: { children: React.ReactNode }) {
           });
         } catch {}
       }
+      // Run mastering pipeline
       masterTake(t);
     },
     [persistTakes, loadIntoPlayer, decodeTakePcm, masterTake]
@@ -372,15 +383,13 @@ export function EngineProvider({ children }: { children: React.ReactNode }) {
 
   const startRecording = useCallback(async () => {
     setError(undefined);
-    engine.stopPlayer();
     try {
+      engine.stopPlayer();
       await engine.startRecording();
       setMicDenied(false);
     } catch (e: any) {
       setMicDenied(true);
-      setError(
-        'Microphone access issue. Please check mic permissions.'
-      );
+      setError(e?.message || 'Microphone unavailable');
     }
   }, []);
 
@@ -390,7 +399,7 @@ export function EngineProvider({ children }: { children: React.ReactNode }) {
       const pcm = dsp.synthesizeTestSignal(sr, 14);
       const bytes = encodeWavBytes([pcm, pcm], sr, 16);
       const blob = new Blob([bytes], { type: 'audio/wav' });
-      const url = (URL as any).createObjectURL(blob);
+      const url = URL.createObjectURL(blob);
       let dataUri: string | undefined;
       try {
         dataUri = await new Promise<string>((res, rej) => {
@@ -444,9 +453,9 @@ export function EngineProvider({ children }: { children: React.ReactNode }) {
         const d = depth || settingsRef.current.bitDepth;
         const bytes = encodeWavBytes([cached.L, cached.R], cached.sr, d);
         const blob = new Blob([bytes], { type: 'audio/wav' });
-        const url = (URL as any).createObjectURL(blob);
+        const url = URL.createObjectURL(blob);
         
-        if (typeof document !== 'undefined') {
+        if (typeof document !== 'undefined' && document.createElement) {
           const a = document.createElement('a');
           a.href = url;
           a.download = `${t.name.replace(/\s+/g, '_')}_Naishabda_${d}bit_48k.wav`;
@@ -454,7 +463,7 @@ export function EngineProvider({ children }: { children: React.ReactNode }) {
           a.click();
           a.remove();
         }
-        setTimeout(() => (URL as any).revokeObjectURL(url), 4000);
+        setTimeout(() => URL.revokeObjectURL(url), 4000);
       } catch (e: any) {
         setError(e?.message || 'Export failed');
       } finally {
@@ -467,17 +476,28 @@ export function EngineProvider({ children }: { children: React.ReactNode }) {
   );
 
   const playerToggle = useCallback(() => {
-    engine.playerPlayPause();
+    try {
+      engine.playerPlayPause();
+    } catch {}
   }, []);
+
   const playerSetMode = useCallback((m: PlayerMode) => {
-    engine.playerSetMode(m);
+    try {
+      engine.playerSetMode(m);
+    } catch {}
   }, []);
+
   const playerSeekRatio = useCallback((r: number) => {
-    engine.playerSeekRatio(r);
+    try {
+      engine.playerSeekRatio(r);
+    } catch {}
   }, []);
+
   const setInputGain = useCallback((g: number) => {
     _setInputGain(g);
-    engine.setInputGain(g);
+    try {
+      engine.setInputGain(g);
+    } catch {}
   }, []);
 
   const value: EngineCtx = {
