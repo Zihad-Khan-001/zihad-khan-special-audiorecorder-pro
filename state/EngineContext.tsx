@@ -44,7 +44,6 @@ interface StoredTake {
 const SETTINGS_KEY = 'naishabda.settings.v1';
 const TAKES_KEY = 'naishabda.takes.v1';
 
-// Session caches (PCM is re-rendered from stored raw audio on demand).
 const pcmCache = new Map<string, { L: Float32Array; R: Float32Array; sr: number }>();
 const rawPcmCache = new Map<string, { pcm: Float32Array; sr: number }>();
 
@@ -147,7 +146,7 @@ export function EngineProvider({ children }: { children: React.ReactNode }) {
         if (tRaw) {
           const stored: StoredTake[] = JSON.parse(tRaw);
           const hydrated: Take[] = stored
-            .filter((t) => t.rawDataUri)
+            .filter((t) => t.rawDataUri || true)
             .map((t) => ({
               ...t,
               rawUrl: t.rawDataUri || '',
@@ -177,7 +176,6 @@ export function EngineProvider({ children }: { children: React.ReactNode }) {
     return off;
   }, []);
 
-  // smooth-ish position polling while playing (diff-checked to avoid idle re-renders)
   useEffect(() => {
     const sameish = (a: PlayerSnapshot, b: PlayerSnapshot) =>
       a.playing === b.playing &&
@@ -185,10 +183,8 @@ export function EngineProvider({ children }: { children: React.ReactNode }) {
       a.durationMs === b.durationMs &&
       Math.abs(a.positionMs - b.positionMs) < 150;
     const iv = setInterval(() => {
-      if (engine.isWeb) {
-        const snap = engine.playerSnapshot();
-        setPlayer((prev) => (sameish(prev, snap) ? prev : { ...snap }));
-      }
+      const snap = engine.playerSnapshot();
+      setPlayer((prev) => (sameish(prev, snap) ? prev : { ...snap }));
     }, 250);
     return () => clearInterval(iv);
   }, []);
@@ -225,7 +221,7 @@ export function EngineProvider({ children }: { children: React.ReactNode }) {
 
   const ensureRawUrl = useCallback(async (t: Take): Promise<string> => {
     if (t.rawUrl && !t.rawUrl.startsWith('data:')) return t.rawUrl;
-    if (engine.isWeb && t.rawDataUri) {
+    if (t.rawDataUri) {
       try {
         const blob = await (await fetch(t.rawDataUri)).blob();
         const url = URL.createObjectURL(blob);
@@ -238,7 +234,6 @@ export function EngineProvider({ children }: { children: React.ReactNode }) {
 
   const loadIntoPlayer = useCallback(
     async (t: Take) => {
-      if (!engine.isWeb) return;
       const raw = await ensureRawUrl(t);
       engine.playerLoad(raw, t.masteredUrl);
     },
@@ -271,7 +266,6 @@ export function EngineProvider({ children }: { children: React.ReactNode }) {
 
   const masterTake = useCallback(
     async (t: Take) => {
-      if (!engine.isWeb) return;
       setMasteringTakeId(t.id);
       setMasterStage('decode');
       try {
@@ -314,7 +308,7 @@ export function EngineProvider({ children }: { children: React.ReactNode }) {
     async (id?: string) => {
       const takeId = id || currentTakeIdRef.current;
       const t = takesRef.current.find((x) => x.id === takeId);
-      if (!t || !engine.isWeb) return;
+      if (!t) return;
       if (masteringTakeId) return;
       await masterTake(t);
     },
@@ -349,8 +343,8 @@ export function EngineProvider({ children }: { children: React.ReactNode }) {
       });
       setCurrentTakeId(id);
       await loadIntoPlayer(t);
-      // waveform from decode (mic path)
-      if (!partial.pcm && engine.isWeb) {
+
+      if (!partial.pcm) {
         try {
           const d = await decodeTakePcm(t);
           const wf = dsp.waveformPeaks(d.pcm, 96);
@@ -361,7 +355,6 @@ export function EngineProvider({ children }: { children: React.ReactNode }) {
           });
         } catch {}
       }
-      // kick mastering render in background
       masterTake(t);
     },
     [persistTakes, loadIntoPlayer, decodeTakePcm, masterTake]
@@ -386,16 +379,12 @@ export function EngineProvider({ children }: { children: React.ReactNode }) {
     } catch (e: any) {
       setMicDenied(true);
       setError(
-        'Microphone blocked. Allow mic access for this page (browser padlock icon) — or generate the test signal below.'
+        'Microphone access issue. Please check mic permissions.'
       );
     }
   }, []);
 
   const generateTestTake = useCallback(async () => {
-    if (!engine.isWeb) {
-      setError('Test-signal generator is available in the web build.');
-      return;
-    }
     try {
       const sr = 48000;
       const pcm = dsp.synthesizeTestSignal(sr, 14);
@@ -438,7 +427,7 @@ export function EngineProvider({ children }: { children: React.ReactNode }) {
     async (id?: string, depth?: 16 | 24) => {
       const takeId = id || currentTakeId;
       const t = takesRef.current.find((x) => x.id === takeId);
-      if (!t || !engine.isWeb) return;
+      if (!t) return;
       setExporting(true);
       try {
         let cached = pcmCache.get(t.id);
@@ -456,12 +445,15 @@ export function EngineProvider({ children }: { children: React.ReactNode }) {
         const bytes = encodeWavBytes([cached.L, cached.R], cached.sr, d);
         const blob = new Blob([bytes], { type: 'audio/wav' });
         const url = (URL as any).createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${t.name.replace(/\s+/g, '_')}_Naishabda_${d}bit_48k.wav`;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
+        
+        if (typeof document !== 'undefined') {
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `${t.name.replace(/\s+/g, '_')}_Naishabda_${d}bit_48k.wav`;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+        }
         setTimeout(() => (URL as any).revokeObjectURL(url), 4000);
       } catch (e: any) {
         setError(e?.message || 'Export failed');
@@ -520,7 +512,7 @@ export function EngineProvider({ children }: { children: React.ReactNode }) {
     playerToggle,
     playerSetMode,
     playerSeekRatio,
-    dspAvailable: Platform.OS === 'web',
+    dspAvailable: true,
   };
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
@@ -532,7 +524,7 @@ export function useEngine(): EngineCtx {
   return v;
 }
 
-// ---------- Fast meter stream (isolated so 30-60fps updates don't rerender screens) ----------
+// ---------- Fast meter stream ----------
 
 interface MeterState {
   bars: number[];
