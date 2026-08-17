@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - main
-  workflow_dispatch: # এটি দিলে Actions ট্যাব থেকে ম্যানুয়ালি বাটন চেপেও বিল্ড শুরু করা যাবে
+  workflow_dispatch:
 
 jobs:
   build:
@@ -25,14 +25,14 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: 🛠 Install EAS CLI globally
+      - name: 🛠 Install EAS CLI
         run: npm install -g eas-cli
 
       - name: 📦 Install Dependencies
         run: npm install
 
       - name: 🚀 Build Local APK
-        run: npx eas-cli build --platform android --profile preview --local --output=app-release.apk
+        run: npx eas-cli build --platform android --profile preview --local --output=app-release.apk --non-interactive
 
       - name: 📥 Upload APK Artifact
         uses: actions/upload-artifact@v4
