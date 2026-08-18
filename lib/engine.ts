@@ -229,14 +229,16 @@ class Engine {
 
   setInputGain(g: number) {
     this.inputGain = g;
-    if (this.gainNode && this.ctx) {
+    if (this.isWeb && this.gainNode && this.ctx) {
       this.gainNode.gain.setTargetAtTime(g, this.ctx.currentTime, 0.015);
     }
   }
 
   private ensureCtx(): AudioContext {
+    if (!this.isWeb) throw new Error('Web Audio API is only supported on Web environment');
     if (!this.ctx) {
       const AC: any = (globalThis as any).AudioContext || (globalThis as any).webkitAudioContext;
+      if (!AC) throw new Error('AudioContext unavailable');
       this.ctx = new AC({ latencyHint: 'interactive' });
     }
     if (this.ctx!.state === 'suspended') {
@@ -366,9 +368,10 @@ class Engine {
   }
 
   private startMeterLoop() {
-    const ctx = this.ctx!;
-    const freq = new Uint8Array(this.analyser!.frequencyBinCount);
-    const time = new Uint8Array(this.analyser!.fftSize);
+    if (!this.ctx || !this.analyser) return;
+    const ctx = this.ctx;
+    const freq = new Uint8Array(this.analyser.frequencyBinCount);
+    const time = new Uint8Array(this.analyser.fftSize);
     const loop = () => {
       if (this.state !== 'recording') return;
       const an = this.analyser!;
@@ -404,6 +407,7 @@ class Engine {
   // ================= DECODE / MASTER =================
 
   async decodeUrlToMono(url: string): Promise<{ pcm: Float32Array; sr: number }> {
+    if (!this.isWeb) throw new Error('Decoding audio URL to mono is supported on Web only.');
     const r = await fetch(url);
     const ab = await r.arrayBuffer();
     const ctx = this.ensureCtx();
@@ -442,6 +446,8 @@ class Engine {
     }
     onStage?.('render-48k');
     const OAC: any = (globalThis as any).OfflineAudioContext || (globalThis as any).webkitOfflineAudioContext;
+    if (!OAC) throw new Error('OfflineAudioContext is not available on this platform.');
+
     const outSr = 48000;
     const outLen = Math.ceil((x.length * outSr) / srcSr) + Math.floor(outSr * 0.2);
     const off: OfflineAudioContext = new OAC(2, outLen, outSr);
@@ -546,7 +552,7 @@ class Engine {
   // ================= PLAYER (A/B) =================
 
   private wirePlaybackGraph() {
-    if (this.pGraphWired || !this.ctx || !this.elA || !this.elB) return;
+    if (!this.isWeb || this.pGraphWired || !this.ctx || !this.elA || !this.elB) return;
     try {
       const ctx = this.ctx;
       const a = ctx.createMediaElementSource(this.elA);
@@ -642,7 +648,7 @@ class Engine {
     if (!this.isWeb) return this.nativePlayPause();
     const el = this.currentEl();
     if (!el || !el.src) return;
-    this.ensureCtx();
+    try { this.ensureCtx(); } catch {}
     if (el.paused || el.ended) {
       try { await el.play(); this.startPlaybackMeter(); } catch {}
     } else {
