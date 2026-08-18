@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { Platform, Alert } from 'react-native';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
@@ -11,7 +11,6 @@ import {
   PlayerMode,
   PROFILES,
 } from '../lib/engine';
-import { encodeWavBytes } from '../lib/wav';
 
 export interface Take {
   id: string;
@@ -199,7 +198,7 @@ export function EngineProvider({ children }: { children: ReactNode }) {
   };
 
   const saveAudioToStorage = async (uri: string, filename: string) => {
-    if (Platform.OS === 'web') {
+    if (Platform.OS === 'web' && typeof document !== 'undefined') {
       const a = document.createElement('a');
       a.href = uri;
       a.download = filename;
@@ -212,7 +211,7 @@ export function EngineProvider({ children }: { children: ReactNode }) {
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(targetUri);
       } else {
-        Alert.alert('Saved', `Audio saved to local storage: ${targetUri}`);
+        Alert.alert('Saved', `Audio saved: ${targetUri}`);
       }
     } catch (e: any) {
       Alert.alert('Export Error', e.message || 'Failed to export audio');
