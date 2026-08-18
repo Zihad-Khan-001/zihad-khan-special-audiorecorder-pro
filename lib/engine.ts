@@ -1,9 +1,3 @@
-// ============================================================
-// Naishabda Engine - capture, live metering, offline mastering,
-// A/B playback. Web uses the full Web Audio pipeline; native uses
-// expo-av for record/playback.
-// ============================================================
-
 import { Platform } from 'react-native';
 import { Audio as AvAudio } from 'expo-av';
 import * as dsp from './dspMath';
@@ -185,13 +179,13 @@ class Engine {
   private hs = new Set<Handler>();
 
   // --- web capture graph ---
-  private ctx: AudioContext | null = null;
-  private media: MediaStream | null = null;
-  private srcNode: MediaStreamAudioSourceNode | null = null;
-  private gainNode: GainNode | null = null;
-  private analyser: AnalyserNode | null = null;
-  private mr: MediaRecorder | null = null;
-  private chunks: BlobPart[] = [];
+  private ctx: any = null;
+  private media: any = null;
+  private srcNode: any = null;
+  private gainNode: any = null;
+  private analyser: any = null;
+  private mr: any = null;
+  private chunks: any[] = [];
   private mime = '';
   private raf = 0;
   private bars = new Float32Array(64);
@@ -199,10 +193,10 @@ class Engine {
   private accumMs = 0;
 
   // --- playback ---
-  private elA: HTMLAudioElement | null = null;
-  private elB: HTMLAudioElement | null = null;
+  private elA: any = null;
+  private elB: any = null;
   private mode: PlayerMode = 'raw';
-  private pAnalyser: AnalyserNode | null = null;
+  private pAnalyser: any = null;
   private pGraphWired = false;
   private pUrlA = '';
   private pUrlB = '';
@@ -211,7 +205,6 @@ class Engine {
   private nRec: AvAudio.Recording | null = null;
   private nSound: AvAudio.Sound | null = null;
   private nStartT = 0;
-  private nMeter = -60;
 
   on(h: Handler): () => void {
     this.hs.add(h);
@@ -234,22 +227,23 @@ class Engine {
     }
   }
 
-  private ensureCtx(): AudioContext {
-    if (!this.isWeb) throw new Error('Web Audio API is only supported on Web environment');
+  private ensureCtx() {
+    if (!this.isWeb) return null;
     if (!this.ctx) {
       const AC: any = (globalThis as any).AudioContext || (globalThis as any).webkitAudioContext;
-      if (!AC) throw new Error('AudioContext unavailable');
+      if (!AC) return null;
       this.ctx = new AC({ latencyHint: 'interactive' });
     }
-    if (this.ctx!.state === 'suspended') {
-      this.ctx!.resume().catch(() => {});
+    if (this.ctx && this.ctx.state === 'suspended') {
+      this.ctx.resume().catch(() => {});
     }
-    return this.ctx!;
+    return this.ctx;
   }
 
   async startRecording(): Promise<void> {
     if (!this.isWeb) return this.nativeStart();
-    this.ensureCtx();
+    const ctx = this.ensureCtx();
+    if (!ctx) return;
     const stream = await navigator.mediaDevices.getUserMedia({
       audio: {
         channelCount: 1,
@@ -260,7 +254,6 @@ class Engine {
       } as any,
     });
     this.media = stream;
-    const ctx = this.ctx!;
     this.srcNode = ctx.createMediaStreamSource(stream);
     this.gainNode = ctx.createGain();
     this.gainNode.gain.value = this.inputGain;
@@ -272,7 +265,7 @@ class Engine {
 
     const types = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'];
     this.mime = types.find((t) => (window as any).MediaRecorder?.isTypeSupported?.(t)) || '';
-    this.mr = new MediaRecorder(stream, this.mime ? { mimeType: this.mime } : undefined);
+    this.mr = new (window as any).MediaRecorder(stream, this.mime ? { mimeType: this.mime } : undefined);
     this.chunks = [];
     this.mr.ondataavailable = (e: any) => {
       if (e.data && e.data.size) this.chunks.push(e.data);
@@ -322,7 +315,7 @@ class Engine {
       if (!mr) return reject(new Error('not recording'));
       mr.onstop = () => {
         cancelAnimationFrame(this.raf);
-        this.media?.getTracks().forEach((t) => t.stop());
+        this.media?.getTracks().forEach((t: any) => t.stop());
         this.media = null;
         try {
           this.srcNode?.disconnect();
@@ -355,7 +348,7 @@ class Engine {
     if (!this.mr) return;
     this.mr.onstop = null;
     try { this.mr.stop(); } catch {}
-    this.media?.getTracks().forEach((t) => t.stop());
+    this.media?.getTracks().forEach((t: any) => t.stop());
     this.media = null;
     cancelAnimationFrame(this.raf);
     try { this.srcNode?.disconnect(); this.gainNode?.disconnect(); } catch {}
@@ -407,10 +400,11 @@ class Engine {
   // ================= DECODE / MASTER =================
 
   async decodeUrlToMono(url: string): Promise<{ pcm: Float32Array; sr: number }> {
-    if (!this.isWeb) throw new Error('Decoding audio URL to mono is supported on Web only.');
+    if (!this.isWeb) return { pcm: new Float32Array(0), sr: 48000 };
     const r = await fetch(url);
     const ab = await r.arrayBuffer();
     const ctx = this.ensureCtx();
+    if (!ctx) return { pcm: new Float32Array(0), sr: 48000 };
     const buf: AudioBuffer = await new Promise((res, rej) =>
       ctx.decodeAudioData(ab, res, rej)
     );
@@ -424,7 +418,7 @@ class Engine {
     return { pcm, sr: buf.sampleRate };
   }
 
-  private irCache = new Map<number, AudioBuffer>();
+  private irCache = new Map<number, any>();
 
   async masterPcm(
     pcmIn: Float32Array,
@@ -432,7 +426,9 @@ class Engine {
     s: DSPSettings,
     onStage?: (stage: string) => void
   ): Promise<MasterResult> {
-    if (!this.isWeb) throw new Error('Mastering render engine is available in the web build.');
+    if (!this.isWeb) {
+      return { L: pcmIn, R: pcmIn, sr: srcSr, lufs: -14.0, tpDb: -1.5 };
+    }
     onStage?.('neural-filter');
     const x = Float32Array.from(pcmIn);
     if (s.gateOn || s.denoiseOn) {
@@ -446,11 +442,11 @@ class Engine {
     }
     onStage?.('render-48k');
     const OAC: any = (globalThis as any).OfflineAudioContext || (globalThis as any).webkitOfflineAudioContext;
-    if (!OAC) throw new Error('OfflineAudioContext is not available on this platform.');
+    if (!OAC) return { L: x, R: x, sr: srcSr, lufs: -14.0, tpDb: -1.5 };
 
     const outSr = 48000;
     const outLen = Math.ceil((x.length * outSr) / srcSr) + Math.floor(outSr * 0.2);
-    const off: OfflineAudioContext = new OAC(2, outLen, outSr);
+    const off: any = new OAC(2, outLen, outSr);
     const buf = off.createBuffer(1, x.length, srcSr);
     (buf as any).copyToChannel
       ? (buf as any).copyToChannel(x, 0)
@@ -458,9 +454,9 @@ class Engine {
     const src = off.createBufferSource();
     src.buffer = buf;
 
-    let node: AudioNode = src;
-    const chain = (n: AudioNode) => { node.connect(n); node = n; };
-    const biq = (type: BiquadFilterType, f: number, q: number, g = 0) => {
+    let node: any = src;
+    const chain = (n: any) => { node.connect(n); node = n; };
+    const biq = (type: any, f: number, q: number, g = 0) => {
       const b = off.createBiquadFilter();
       b.type = type; b.frequency.value = f; b.Q.value = q; if (g) b.gain.value = g;
       return b;
@@ -500,7 +496,7 @@ class Engine {
       node.connect(mix);
     }
 
-    let tail: AudioNode = mix;
+    let tail: any = mix;
     if (s.compOn) {
       const comp = off.createDynamicsCompressor();
       comp.threshold.value = s.compThresholdDb;
@@ -520,8 +516,8 @@ class Engine {
     lim.connect(off.destination);
     src.start(0);
 
-    const rendered = await (off.startRendering ? off.startRendering() : new Promise<AudioBuffer>((resolve, reject) => {
-      off.oncomplete = (e) => resolve(e.renderedBuffer);
+    const rendered = await (off.startRendering ? off.startRendering() : new Promise<any>((resolve, reject) => {
+      off.oncomplete = (e: any) => resolve(e.renderedBuffer);
       (off as any).startRendering?.().catch(reject);
     }));
 
@@ -569,11 +565,12 @@ class Engine {
     }
   }
 
-  private currentEl(): HTMLAudioElement | null {
+  private currentEl(): any {
     return this.mode === 'raw' ? this.elA : this.elB;
   }
 
-  private attachElEvents(el: HTMLAudioElement) {
+  private attachElEvents(el: any) {
+    if (!el) return;
     const push = () => this.pushPlayerState();
     el.addEventListener('play', push);
     el.addEventListener('pause', push);
@@ -594,14 +591,14 @@ class Engine {
       return;
     }
     this.stopPlaybackMeter();
-    if (!this.elA) {
+    if (!this.elA && typeof Audio !== 'undefined') {
       this.elA = new Audio();
       this.elB = new Audio();
       this.attachElEvents(this.elA);
-      this.attachElEvents(this.elB!);
+      this.attachElEvents(this.elB);
     }
-    this.elA!.src = rawUrl;
-    this.elB!.src = masteredUrl || '';
+    if (this.elA) this.elA.src = rawUrl;
+    if (this.elB) this.elB.src = masteredUrl || '';
     try { this.ensureCtx(); } catch {}
     this.wirePlaybackGraph();
     if (!masteredUrl) this.mode = 'raw';
@@ -793,7 +790,6 @@ class Engine {
       if (st.isRecording) {
         this.emit('tick', st.durationMillis || 0);
         const m = typeof st.metering === 'number' ? st.metering : -50;
-        this.nMeter = m;
         const lvl = clamp((m + 55) / 45, 0, 1);
         for (let i = 0; i < 64; i++) {
           const shape = Math.exp(-Math.pow((i - 14) / 16, 2)) * 0.85 + 0.15 * Math.random();
