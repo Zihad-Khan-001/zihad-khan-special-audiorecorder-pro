@@ -1,7 +1,7 @@
 // ============================================================
 // Naishabda Engine - capture, live metering, offline mastering,
 // A/B playback. Web uses the full Web Audio pipeline; native uses
-// expo-av for record/playback (mastering renders in the web build).
+// expo-av for record/playback.
 // ============================================================
 
 import { Platform } from 'react-native';
@@ -582,14 +582,15 @@ class Engine {
     el.addEventListener('loadedmetadata', push);
   }
 
-  playerLoad(rawUrl: string, masteredUrl?: string) {
+  async playerLoad(rawUrl: string, masteredUrl?: string) {
     this.pUrlA = rawUrl;
     this.pUrlB = masteredUrl || '';
     if (!this.isWeb) {
       if (this.nSound) {
-        this.nSound.unloadAsync().catch(() => {});
+        await this.nSound.unloadAsync().catch(() => {});
         this.nSound = null;
       }
+      this.pushPlayerState();
       return;
     }
     this.stopPlaybackMeter();
@@ -608,9 +609,10 @@ class Engine {
   }
 
   playerSetMasteredUrl(url: string) {
-    if (!this.isWeb || !this.elB) return;
-    this.elB.src = url;
     this.pUrlB = url;
+    if (this.isWeb && this.elB) {
+      this.elB.src = url;
+    }
     this.pushPlayerState();
   }
 
@@ -623,8 +625,23 @@ class Engine {
   }
 
   async playerSetMode(mode: PlayerMode) {
-    if (!this.isWeb) return;
     if (mode === 'mastered' && !this.hasMasteredLoaded()) return;
+
+    if (!this.isWeb) {
+      this.mode = mode;
+      if (this.nSound) {
+        const st: any = await this.nSound.getStatusAsync();
+        const pos = st?.positionMillis || 0;
+        const wasPlaying = st?.isPlaying || false;
+        await this.nSound.unloadAsync().catch(() => {});
+        this.nSound = null;
+        await this.nativePlayPause(pos, wasPlaying);
+      } else {
+        this.pushPlayerState();
+      }
+      return;
+    }
+
     const cur = this.currentEl();
     const t = cur ? cur.currentTime : 0;
     const wasPlaying = cur ? !cur.paused && !cur.ended : false;
@@ -658,7 +675,12 @@ class Engine {
   }
 
   playerSeekMs(ms: number) {
-    if (!this.isWeb) return;
+    if (!this.isWeb) {
+      if (this.nSound) {
+        this.nSound.setPositionAsync(ms).catch(() => {});
+      }
+      return;
+    }
     const el = this.currentEl();
     if (!el || !isFinite(el.duration)) return;
     el.currentTime = clamp(ms / 1000, 0, el.duration);
@@ -688,6 +710,14 @@ class Engine {
   }
 
   playerSnapshot(): PlayerSnapshot {
+    if (!this.isWeb) {
+      return {
+        playing: false,
+        positionMs: 0,
+        durationMs: 0,
+        mode: this.mode,
+      };
+    }
     const el = this.currentEl();
     const dur = el && isFinite(el.duration) ? el.duration * 1000 : 0;
     return {
@@ -826,13 +856,15 @@ class Engine {
     this.emit('levels', Array.from(this.bars), -72, -72);
   }
 
-  private async nativePlayPause() {
+  private async nativePlayPause(initialPosMs = 0, autoPlay = true) {
     try {
+      const activeUrl = this.mode === 'mastered' ? this.pUrlB : this.pUrlA;
+      if (!activeUrl) return;
+
       if (!this.nSound) {
-        if (!this.pUrlA) return;
         const { sound } = await AvAudio.Sound.createAsync(
-          { uri: this.pUrlA },
-          { shouldPlay: true },
+          { uri: activeUrl },
+          { shouldPlay: autoPlay, positionMillis: initialPosMs },
           (st: any) => {
             if (!st) return;
             if (st.isLoaded) {
@@ -840,14 +872,14 @@ class Engine {
                 playing: !!st.isPlaying,
                 positionMs: st.positionMillis || 0,
                 durationMs: st.durationMillis || 0,
-                mode: 'raw' as PlayerMode,
+                mode: this.mode,
               });
               if (st.didJustFinish) {
                 this.emit('player', {
                   playing: false,
                   positionMs: 0,
                   durationMs: st.durationMillis || 0,
-                  mode: 'raw' as PlayerMode,
+                  mode: this.mode,
                 });
               }
             }
