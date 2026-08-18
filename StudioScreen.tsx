@@ -20,12 +20,11 @@ import { fmtMs } from '../lib/format';
 
 type EngineStateName = 'idle' | 'recording' | 'paused';
 
-// -------- meter-isolated pieces (rerender at meter rate only) --------
-
 function LiveHeader({ engineState, playing }: { engineState: EngineStateName; playing: boolean }) {
   const { rmsDb } = useMeter();
   const blink = useRef(new Animated.Value(1)).current;
   const recording = engineState === 'recording';
+
   useEffect(() => {
     if (!recording) return;
     const anim = Animated.loop(
@@ -121,8 +120,6 @@ function MeterStrip({ engineState }: { engineState: EngineStateName }) {
   );
 }
 
-// -------- screen --------
-
 export default function StudioScreen() {
   const {
     engineState,
@@ -166,7 +163,6 @@ export default function StudioScreen() {
           <Badge icon="mic" label="Boya BY-M1 • Calibrated" color={C.cyan} soft />
         </View>
 
-        {/* টেক চিপস সবসময় ভিজিবল থাকবে যাতে টেক সিলেক্ট করা সহজ হয় */}
         <TakeChips />
 
         <View style={st.recCard}>
@@ -275,7 +271,6 @@ export default function StudioScreen() {
             : 'Center: finish & master • Right: resume'}
         </Text>
 
-        {/* প্লেয়ার কার্ডকে একটিভ টেক থাকলে রেন্ডার নিশ্চিত করা */}
         {activeTake || player.playing ? <PlayerCard /> : <PlayerCard />}
 
         <Text style={st.foot} numberOfLines={1}>
@@ -293,7 +288,7 @@ const st = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justify: 'space-between',
+    justifyContent: 'space-between',
     gap: 10,
     paddingHorizontal: 2,
   },
