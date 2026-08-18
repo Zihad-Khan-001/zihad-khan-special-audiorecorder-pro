@@ -30,7 +30,8 @@ export function PlayerCard() {
     playerSeekRatio,
     masteringTakeId,
     masterStage,
-    exportTake,
+    exportRawTake,
+    exportMasteredTake,
     reMaster,
     deleteTake,
     exporting,
@@ -263,17 +264,33 @@ export function PlayerCard() {
         </View>
       ) : null}
 
-      {/* actions */}
+      {/* actions (RAW & Mastered Export Buttons Separated) */}
       <View style={st.actions}>
         <TouchableOpacity
-          style={[st.actionPrimary, exporting && { opacity: 0.5 }]}
-          onPress={() => exportTake()}
+          style={[st.actionExportRaw, exporting && { opacity: 0.5 }]}
+          onPress={() => exportRawTake()}
           disabled={exporting}
           activeOpacity={0.85}
         >
-          <Ionicons name="arrow-down-circle" size={16} color="#FFF" />
-          <Text style={st.actionPrimaryText}>{exporting ? 'Rendering…' : 'Export WAV'}</Text>
+          <Ionicons name="download-outline" size={15} color={C.red} />
+          <Text style={[st.actionExportText, { color: C.red }]}>Raw WAV</Text>
         </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[
+            st.actionExportMastered,
+            (!masteredReady || exporting) && { opacity: 0.4 },
+          ]}
+          onPress={() => exportMasteredTake()}
+          disabled={!masteredReady || exporting}
+          activeOpacity={0.85}
+        >
+          <Ionicons name="arrow-down-circle" size={16} color="#FFF" />
+          <Text style={st.actionPrimaryText}>
+            {exporting ? 'Saving…' : 'Mastered WAV'}
+          </Text>
+        </TouchableOpacity>
+
         <TouchableOpacity
           style={st.actionGhost}
           onPress={() => reMaster()}
@@ -281,8 +298,8 @@ export function PlayerCard() {
           activeOpacity={0.7}
         >
           <Ionicons name="sync" size={15} color={C.cyan} />
-          <Text style={[st.actionGhostText, { color: C.cyan }]}>Re-Master</Text>
         </TouchableOpacity>
+
         <TouchableOpacity
           style={st.actionGhost}
           onPress={() => deleteTake(currentTake.id)}
@@ -424,26 +441,38 @@ const st = StyleSheet.create({
     borderRadius: R.pill,
   },
   metricText: { color: C.cyan, fontSize: 10.5, fontWeight: '700', ...mono },
-  actions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  actionPrimary: {
+  actions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  actionExportRaw: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    backgroundColor: C.inset,
+    borderColor: C.red + '44',
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderRadius: 14,
+  },
+  actionExportMastered: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 7,
+    gap: 6,
     backgroundColor: C.blue,
     paddingVertical: 12,
     borderRadius: 14,
   },
-  actionPrimaryText: { color: '#FFF', fontSize: 13.5, fontWeight: '800', letterSpacing: 0.2 },
+  actionPrimaryText: { color: '#FFF', fontSize: 12.5, fontWeight: '800', letterSpacing: 0.2 },
+  actionExportText: { fontSize: 12, fontWeight: '700' },
   actionGhost: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    justifyContent: 'center',
     backgroundColor: C.card2,
-    paddingHorizontal: 13,
+    paddingHorizontal: 12,
     paddingVertical: 12,
     borderRadius: 14,
   },
-  actionGhostText: { fontSize: 12.5, fontWeight: '700' },
 });
